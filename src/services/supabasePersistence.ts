@@ -1,3 +1,4 @@
+﻿import { supabase } from "../database/supabaseClient";
 
 export const MODULE_NAMES = {
   REGULAMENTACAO: "regulamentacao",
@@ -10,37 +11,59 @@ export const MODULE_NAMES = {
   PONTO: "ponto",
 } as const;
 
-function loadAllFromLocalStorage<T>(moduleName: string): Record<string, T> {
+export async function loadModuleData<T>(moduleName: string, periodKey: string): Promise<T | null> {
+  const { data, error } = await supabase
+    .from("modulos_dados")
+    .select("dados")
+    .eq("modulo", moduleName)
+    .eq("periodo", periodKey)
+    .maybeSingle();
+  if (error) { console.error("loadModuleData", error); return null; }
+  return data ? (data.dados as T) : null;
+}
+
+export async function loadAllModuleData<T>(moduleName: string): Promise<Record<string, T>> {
+  const { data, error } = await supabase
+    .from("modulos_dados")
+    .select("periodo, dados")
+    .eq("modulo", moduleName);
+  if (error) { console.error("loadAllModuleData", error); return {}; }
   const result: Record<string, T> = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(moduleName + "_")) {
-      const periodKey = key.substring(moduleName.length + 1);
-      const raw = localStorage.getItem(key);
-      if (raw) result[periodKey] = JSON.parse(raw);
-    }
-  }
+  for (const row of data ?? []) result[row.periodo] = row.dados as T;
   return result;
 }
 
-export async function loadModuleData<T>(moduleName:string, periodKey:string):Promise<T|null>{
-  const raw=localStorage.getItem(`${moduleName}_${periodKey}`);
-  return raw ? JSON.parse(raw) : null;
-}
-export async function loadAllModuleData<T>(moduleName:string):Promise<Record<string,T>>{
-  return loadAllFromLocalStorage<T>(moduleName);
-}
-export async function saveModuleData<T>(moduleName:string, periodKey:string, data:T):Promise<void>{
-  localStorage.setItem(`${moduleName}_${periodKey}`, JSON.stringify(data));
-}
-export async function saveAllModuleData<T>(moduleName:string, allData:Record<string,T>):Promise<void>{
-  Object.entries(allData).forEach(([k,v])=>localStorage.setItem(`${moduleName}_${k}`, JSON.stringify(v)));
-}
-export async function loadSimpleData<T>(moduleName: string): Promise<T | null> {
-  const raw = localStorage.getItem(moduleName);
-  return raw ? JSON.parse(raw) : null;
+export async function saveModuleData<T>(moduleName: string, periodKey: string, data: T): Promise<void> {
+  const { error } = await supabase
+    .from("modulos_dados")
+    .upsert({ modulo: moduleName, periodo: periodKey, dados: data, updated_at: new Date().toISOString() },
+             { onConflict: "modulo,periodo" });
+  if (error) console.error("saveModuleData", error);
 }
 
-export async function saveSimpleData<T>(moduleName: string, data: T): Promise<void> {
-  localStorage.setItem(moduleName, JSON.stringify(data));
+export async function saveAllModuleData<T>(moduleName: string, allData: Record<string, T>): Promise<void> {
+  const rows = Object.entries(allData).map(([periodo, dados]) => ({
+    modulo: moduleName,
+    periodo,
+    dados,
+    updated_at: new Date().toISOString(),
+  }));
+  if (!rows.length) return;
+  const { error } = await supabase
+    .from("modulos_dados")
+    .upsert(rows, { onConflict: "modulo,periodo" });
+  if (error) console.error("saveAllModuleData", error);
+}
+
+export async function loadSimpleData<T>(moduleName: string, key = "default", defaultValue?: T): Promise<T | null> {
+  const result = await loadModuleData<T>(moduleName, key);
+  if (result === null && defaultValue !== undefined) return defaultValue;
+  return result;
+}
+
+export async function uploadFile(bucket: string, path: string, file: File): Promise<string | null> {
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+  if (error) { console.error("uploadFile", error); return null; }
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
 }
