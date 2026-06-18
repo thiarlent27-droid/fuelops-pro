@@ -5,3 +5,5 @@ dist
 *.zip
 chat/
 pnpm-lock.yaml
+
+.vercel
