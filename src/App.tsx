@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Users, Fuel, Package, DollarSign, Shield, Target, Wrench, Headphones, Settings, Droplets } from "lucide-react";
+import { Users, Fuel, Package, DollarSign, Shield, Target, Wrench, Headphones, Settings, Droplets, LogOut, Loader2 } from "lucide-react";
+import { useAuth } from "./hooks/useAuth";
+import Login from "./pages/Login";
 import GestaoOperacoes from "./pages/GestaoOperacoes";
 import ControleEstoque from "./pages/ControleEstoque";
 import Financeiro from "./pages/Financeiro";
@@ -14,7 +16,20 @@ import TrocaOleoLubrificacao from "./pages/TrocaOleoLubrificacao";
 type Tab = "gestao" | "estoque" | "financeiro" | "equipe" | "regulamentacao" | "estrategia" | "manutencao" | "atendimento" | "configuracoes" | "lubrificacao";
 
 function App() {
+  const { session, loading, signIn, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("estoque");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#10131a] flex items-center justify-center">
+        <Loader2 size={24} className="animate-spin text-[#00a572]" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login onLogin={signIn} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#10131a] text-[#e1e2ec] font-['Inter',sans-serif]">
@@ -147,6 +162,16 @@ function App() {
           <span className="text-[10px] font-['JetBrains_Mono',monospace] text-[#6b7280]">
             {new Date().toLocaleDateString("pt-BR")}
           </span>
+          <span className="text-[10px] text-[#4b5563] hidden sm:block truncate max-w-[140px]">
+            {session.user.email}
+          </span>
+          <button
+            onClick={signOut}
+            title="Sair"
+            className="flex items-center gap-1 text-[#6b7280] hover:text-[#f87171] transition-colors"
+          >
+            <LogOut size={13} />
+          </button>
         </div>
       </header>
 
