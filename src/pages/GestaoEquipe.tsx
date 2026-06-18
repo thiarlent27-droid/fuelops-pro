@@ -500,12 +500,7 @@ function parseStaffRow(
 // ═══════════════════════════════════════════════════════════
 
 function loadFromStorage(): Record<string, PontoData> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function saveToStorage(_data: Record<string, PontoData>): void {

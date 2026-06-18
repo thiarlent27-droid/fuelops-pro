@@ -1,4 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { loadModuleData, saveModuleData } from "../services/supabasePersistence";
+
+const MODULO_NAME = "estoque";
 import {
   Upload,
   FileSpreadsheet,
@@ -250,6 +253,7 @@ export default function ControleEstoque() {
     { name: string; status: string; ok: boolean }[]
   >([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loaded, setLoaded] = useState(false);
 
   // ── Month selector data ──
   const months = [
@@ -269,6 +273,44 @@ export default function ControleEstoque() {
 
   const currentMonth = months.find((m) => m.value === periodoInicio.slice(0, 7));
   const monthLabel = currentMonth ? currentMonth.label + " 2026" : "Selecionar mês";
+
+  // ── Chave de período atual ──
+  const currentKey = periodoInicio.slice(0, 7);
+
+  // ── Carregar dados do Supabase ao montar / trocar mês ──
+  useEffect(() => {
+    loadModuleData<{
+      bicos: BicoData[];
+      rawResultado: Record<number, string>;
+      perdasSobras: PerdasSobrasLMC[];
+      pedidos: Pedido[];
+      precios: Record<string, number>;
+      afericoes: Afericoes;
+    }>(MODULO_NAME, currentKey).then((data) => {
+      if (data) {
+        setBicos(data.bicos ?? []);
+        setRawResultado(data.rawResultado ?? {});
+        setPerdasSobras(data.perdasSobras ?? []);
+        setPedidos(data.pedidos ?? []);
+        setPrecios(data.precios ?? PRECO_DEFAULTS);
+        setAfericoes(data.afericoes ?? { diasComEstoque: 0, qtdItensCadastrados: 0, numItensVendidos: 0, qtdTotalItens: 0, precisaoEstoque: 0, qtdItensPendentes: 0, itensMalArmazenados: 0, organizacaoEstoque: "", auditoriaEstoque: "", dataAuditoria: "" });
+      } else {
+        setBicos([]);
+        setRawResultado({});
+        setPerdasSobras([]);
+        setPedidos([]);
+        setPrecios({ ...PRECO_DEFAULTS });
+        setAfericoes({ diasComEstoque: 0, qtdItensCadastrados: 0, numItensVendidos: 0, qtdTotalItens: 0, precisaoEstoque: 0, qtdItensPendentes: 0, itensMalArmazenados: 0, organizacaoEstoque: "", auditoriaEstoque: "", dataAuditoria: "" });
+      }
+      setLoaded(true);
+    });
+  }, [currentKey]);
+
+  // ── Auto-save ao alterar dados ──
+  useEffect(() => {
+    if (!loaded) return;
+    saveModuleData(MODULO_NAME, currentKey, { bicos, rawResultado, perdasSobras, pedidos, precios, afericoes });
+  }, [bicos, rawResultado, perdasSobras, pedidos, precios, afericoes, currentKey, loaded]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

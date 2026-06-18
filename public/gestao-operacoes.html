@@ -6,6 +6,7 @@
 <title>FuelOps Pro — Gestão de Operações</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -302,6 +303,26 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 </div>
 
 <script>
+// ── SUPABASE ─────────────────────────────────────────────
+const _sb = supabase.createClient(
+  'https://izuimqcpmhuyjcbtkttf.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6dWltcWNwbWh1eWpjYnRrdHRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDc2ODUsImV4cCI6MjA5NzMyMzY4NX0.7Ap5E9PWlxuCYDOfEbT1XQ0m0ke8OzIfkZOPnbCZ5JQ'
+);
+
+async function sbSave(key, data) {
+  await _sb.from('modulos_dados').upsert(
+    { modulo: 'gestao_operacoes', periodo: key, dados: data, updated_at: new Date().toISOString() },
+    { onConflict: 'modulo,periodo' }
+  );
+}
+
+async function sbLoadAll() {
+  const { data } = await _sb.from('modulos_dados')
+    .select('periodo,dados')
+    .eq('modulo', 'gestao_operacoes');
+  return data || [];
+}
+
 // ── ESTADO ──────────────────────────────────────────────
 const DB = {};
 let currentKey = null;
@@ -498,10 +519,24 @@ function commitPending(key, data) {
     const sorted = [...data.horaTexts].sort((a,b)=>a.sem-b.sem).map(x=>x.text);
     DB[key].horas = parseVendasHora(sorted);
   }
+  sbSave(key, DB[key]);
   updateMonthMenu();
   if (!currentKey) selectMonth(key);
   else if (currentKey===key) renderPage();
 }
+
+// ── CARREGAR DADOS DO SUPABASE AO INICIAR ────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  const rows = await sbLoadAll();
+  rows.forEach(({ periodo, dados }) => {
+    DB[periodo] = dados;
+  });
+  if (Object.keys(DB).length) {
+    updateMonthMenu();
+    const lastKey = Object.keys(DB).sort().reverse()[0];
+    selectMonth(lastKey);
+  }
+});
 
 function addLog(log,fname,status,cls) {
   const el=document.createElement('div');
