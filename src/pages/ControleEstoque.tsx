@@ -444,7 +444,8 @@ export default function ControleEstoque() {
         prev.map((b) => {
           const precoKey = getPrecoKey(b.tipo);
           const preco = newPrecios[precoKey] || b.preco;
-          const perdasSobras = (b.vendas * b.resultado) / 20;
+          // resultado negativo = bico jogando menos = SOBRA (impacto positivo)
+          const perdasSobras = -(b.vendas * b.resultado) / 20;
           const impacto = perdasSobras * preco;
           return { ...b, preco, perdasSobras, impacto };
         })
@@ -457,7 +458,8 @@ export default function ControleEstoque() {
     setBicos((prev) =>
       prev.map((b, i) => {
         if (i !== idx) return b;
-        const perdasSobras = (b.vendas * val) / 20;
+        // resultado negativo = bico jogando menos = SOBRA (impacto positivo)
+        const perdasSobras = -(b.vendas * val) / 20;
         const impacto = perdasSobras * b.preco;
         return { ...b, resultado: val, perdasSobras, impacto };
       })
