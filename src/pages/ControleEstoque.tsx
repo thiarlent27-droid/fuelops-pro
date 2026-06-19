@@ -221,8 +221,12 @@ const SectionCard = ({
 // ── MAIN COMPONENT ─────────────────────────────────────
 export default function ControleEstoque() {
   // ── State ──
-  const [periodoInicio, setPeriodoInicio] = useState("2026-01-01");
-  const [periodoFim, setPeriodoFim] = useState("2026-01-31");
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(new Date().getMonth());
+  const [periodoInicio, setPeriodoInicio] = useState(
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`
+  );
+  const [periodoFim, setPeriodoFim] = useState("");
   const [bicos, setBicos] = useState<BicoData[]>([]);
   const [rawResultado, setRawResultado] = useState<Record<number, string>>({});
   const [perdasSobras, setPerdasSobras] = useState<PerdasSobrasLMC[]>([]);
@@ -255,24 +259,34 @@ export default function ControleEstoque() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // ── Month selector data ──
-  const months = [
-    { label: "Janeiro", value: "2026-01", days: "31" },
-    { label: "Fevereiro", value: "2026-02", days: "28" },
-    { label: "Março", value: "2026-03", days: "31" },
-    { label: "Abril", value: "2026-04", days: "30" },
-    { label: "Maio", value: "2026-05", days: "31" },
-    { label: "Junho", value: "2026-06", days: "30" },
-    { label: "Julho", value: "2026-07", days: "31" },
-    { label: "Agosto", value: "2026-08", days: "31" },
-    { label: "Setembro", value: "2026-09", days: "30" },
-    { label: "Outubro", value: "2026-10", days: "31" },
-    { label: "Novembro", value: "2026-11", days: "30" },
-    { label: "Dezembro", value: "2026-12", days: "31" },
-  ];
+  // ── Month selector data (dinâmico por ano) ──
+  const MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-  const currentMonth = months.find((m) => m.value === periodoInicio.slice(0, 7));
-  const monthLabel = currentMonth ? currentMonth.label + " 2026" : "Selecionar mês";
+  const months = MONTH_NAMES.map((label, idx) => {
+    const days = new Date(selectedYear, idx + 1, 0).getDate();
+    const value = `${selectedYear}-${String(idx + 1).padStart(2, "0")}`;
+    return { label, value, days: String(days) };
+  });
+
+  const monthLabel = `${MONTH_NAMES[selectedMonthIdx]} ${selectedYear}`;
+
+  const handleMonthSelect = (idx: number) => {
+    const year = selectedYear;
+    const days = new Date(year, idx + 1, 0).getDate();
+    const value = `${year}-${String(idx + 1).padStart(2, "0")}`;
+    setSelectedMonthIdx(idx);
+    setPeriodoInicio(value + "-01");
+    setPeriodoFim(value + "-" + String(days).padStart(2, "0"));
+    setShowMonthMenu(false);
+  };
+
+  const handleYearChange = (newYear: number) => {
+    const days = new Date(newYear, selectedMonthIdx + 1, 0).getDate();
+    const value = `${newYear}-${String(selectedMonthIdx + 1).padStart(2, "0")}`;
+    setSelectedYear(newYear);
+    setPeriodoInicio(value + "-01");
+    setPeriodoFim(value + "-" + String(days).padStart(2, "0"));
+  };
 
   // ── Chave de período atual ──
   const currentKey = periodoInicio.slice(0, 7);
@@ -531,7 +545,7 @@ export default function ControleEstoque() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Month Selector - estilo Gestão de Operações */}
+          {/* Month Selector - idêntico ao Financeiro */}
           <div className="relative" ref={monthSelectorRef}>
             <button
               onClick={() => setShowMonthMenu(!showMonthMenu)}
@@ -550,20 +564,36 @@ export default function ControleEstoque() {
             </button>
 
             {showMonthMenu && (
-              <div className="absolute top-[calc(100%+6px)] left-0 min-w-[260px] bg-[#1d2027] border border-[#262a31] rounded-lg overflow-hidden z-30 shadow-[0_8px_32px_rgba(0,0,0,.5)]">
+              <div className="absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2 w-[300px] bg-[#1d2027] border border-[#262a31] rounded-lg overflow-hidden z-30 shadow-[0_8px_32px_rgba(0,0,0,.5)]">
+                {/* Navegação de ano */}
+                <div className="flex items-center justify-between px-2 py-2 border-b border-[#262a31]">
+                  <button
+                    onClick={() => handleYearChange(selectedYear - 1)}
+                    className="flex items-center gap-1.5 text-[11px] text-[#9ca3af] hover:text-white transition-colors px-2.5 py-1.5 rounded hover:bg-[#262a31] flex-shrink-0"
+                  >
+                    <span className="text-[10px]">◀</span>
+                    <span>Anterior</span>
+                  </button>
+                  <span className="text-[13px] font-bold text-white font-['JetBrains_Mono',monospace] flex-shrink-0 px-3">
+                    {selectedYear}
+                  </span>
+                  <button
+                    onClick={() => handleYearChange(selectedYear + 1)}
+                    className="flex items-center gap-1.5 text-[11px] text-[#9ca3af] hover:text-white transition-colors px-2.5 py-1.5 rounded hover:bg-[#262a31] flex-shrink-0"
+                  >
+                    <span>Próximo</span>
+                    <span className="text-[10px]">▶</span>
+                  </button>
+                </div>
                 <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6b7280] py-2.5 px-3.5 pb-1 font-['JetBrains_Mono',monospace]">
                   Meses disponíveis
                 </div>
-                {months.map((m) => (
+                {months.map((m, idx) => (
                   <button
                     key={m.value}
-                    onClick={() => {
-                      setPeriodoInicio(m.value + "-01");
-                      setPeriodoFim(m.value + "-" + m.days);
-                      setShowMonthMenu(false);
-                    }}
+                    onClick={() => handleMonthSelect(idx)}
                     className={`flex items-center justify-between w-full px-3.5 py-2.5 text-[12px] border-b border-[rgba(38,42,49,.4)] last:border-b-0 transition-colors ${
-                      m.value + "-01" === periodoInicio
+                      m.value === periodoInicio.slice(0, 7)
                         ? "text-white bg-[rgba(0,165,114,.08)]"
                         : "text-[#9ca3af] hover:bg-[#262a31] hover:text-white"
                     }`}
