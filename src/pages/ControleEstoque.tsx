@@ -274,6 +274,7 @@ export default function ControleEstoque() {
     const year = selectedYear;
     const days = new Date(year, idx + 1, 0).getDate();
     const value = `${year}-${String(idx + 1).padStart(2, "0")}`;
+    setLoaded(false); // bloqueia auto-save durante troca de mês
     setSelectedMonthIdx(idx);
     setPeriodoInicio(value + "-01");
     setPeriodoFim(value + "-" + String(days).padStart(2, "0"));
@@ -283,6 +284,7 @@ export default function ControleEstoque() {
   const handleYearChange = (newYear: number) => {
     const days = new Date(newYear, selectedMonthIdx + 1, 0).getDate();
     const value = `${newYear}-${String(selectedMonthIdx + 1).padStart(2, "0")}`;
+    setLoaded(false); // bloqueia auto-save durante troca de ano
     setSelectedYear(newYear);
     setPeriodoInicio(value + "-01");
     setPeriodoFim(value + "-" + String(days).padStart(2, "0"));
@@ -370,6 +372,17 @@ export default function ControleEstoque() {
 
   const tipoOrder = ["ETANOL", "GASOLINA", "S500", "S10", "ARLA"];
 
+  // ── Detectar mês/ano do nome do arquivo (ex: "05-2026", "04-26") ──
+  const detectFileMonth = (filename: string): string | null => {
+    const m = filename.match(/(\d{2})[_\-\s](\d{2,4})/);
+    if (!m) return null;
+    let month = parseInt(m[1]);
+    let year = parseInt(m[2]);
+    if (year < 100) year += 2000;
+    if (month < 1 || month > 12) return null;
+    return `${year}-${String(month).padStart(2, "0")}`;
+  };
+
   // ── CSV Import ──
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -378,63 +391,60 @@ export default function ControleEstoque() {
 
       files.forEach((file) => {
         const fn = file.name.toLowerCase();
+        const detectedKey = detectFileMonth(file.name) || currentKey;
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           const text = ev.target?.result as string;
+
+          // Carregar dados já existentes para esse mês (para não sobrescrever o outro tipo)
+          const existing = await loadModuleData<{
+            bicos: BicoData[]; rawResultado: Record<number,string>;
+            perdasSobras: PerdasSobrasLMC[]; pedidos: Pedido[];
+            precios: Record<string,number>; afericoes: Afericoes;
+          }>(MODULO_NAME, detectedKey);
+
           if (fn.includes("bico")) {
-            // Parse Vendas por Bico
             const rows = parseCsvRows(text);
             const parsed: BicoData[] = rows
               .map((r) => {
-                const tipo = (
-                  r["agrupamento"] ||
-                  r["prl_ds_produto_lmc"] ||
-                  ""
-                ).trim();
+                const tipo = (r["agrupamento"] || r["prl_ds_produto_lmc"] || "").trim();
                 const precoKey = getPrecoKey(tipo);
                 const vendas = parseBR(r["vei_vl_quantidade"]);
                 const preco = parseBR(r["vei_vl_media"]) || precios[precoKey] || 0;
-                return {
-                  bico: r["bic_ds_referencia"] || "",
-                  resultado: 0,
-                  vendas,
-                  perdasSobras: 0,
-                  tipo,
-                  preco,
-                  impacto: 0,
-                };
+                return { bico: r["bic_ds_referencia"] || "", resultado: 0, vendas, perdasSobras: 0, tipo, preco, impacto: 0 };
               })
               .filter((b) => b.bico);
-            setBicos(parsed);
-            setImportStatus((prev) => ({ ...prev, bicos: true }));
-            newLog.push({
-              name: file.name,
-              status: `Bicos importados: ${parsed.length}`,
-              ok: true,
-            });
+
+            const merged = { ...(existing || {}), bicos: parsed, precios: existing?.precios ?? precios };
+            await saveModuleData(MODULO_NAME, detectedKey, merged);
+
+            // Se for o mês atual, atualiza a tela
+            if (detectedKey === currentKey) {
+              setBicos(parsed);
+              setImportStatus((prev) => ({ ...prev, bicos: true }));
+            }
+            newLog.push({ name: file.name, status: `Bicos importados: ${parsed.length} → ${detectedKey}`, ok: true });
+
           } else if (fn.includes("perda") || fn.includes("sobra") || fn.includes("lmc")) {
-            // Parse Perdas e Sobras LMC
             const rows = parseCsvRows(text);
             const parsed: PerdasSobrasLMC[] = rows
               .map((r) => {
                 const produto = (r["prl_ds_produto_lmc"] || "").trim();
-                const perdasSobras = parseBR(r["lmc_vl_perda_sobra"]);
+                const ps = parseBR(r["lmc_vl_perda_sobra"]);
                 const precoKey = getPrecoKey(produto);
                 const preco = precios[precoKey] || 0;
-                return {
-                  produto,
-                  perdasSobras,
-                  impacto: perdasSobras * preco,
-                };
+                return { produto, perdasSobras: ps, impacto: ps * preco };
               })
               .filter((p) => p.produto);
-            setPerdasSobras(parsed);
-            setImportStatus((prev) => ({ ...prev, perdas: true }));
-            newLog.push({
-              name: file.name,
-              status: `Produtos importados: ${parsed.length}`,
-              ok: true,
-            });
+
+            const merged = { ...(existing || {}), perdasSobras: parsed, precios: existing?.precios ?? precios };
+            await saveModuleData(MODULO_NAME, detectedKey, merged);
+
+            if (detectedKey === currentKey) {
+              setPerdasSobras(parsed);
+              setImportStatus((prev) => ({ ...prev, perdas: true }));
+            }
+            newLog.push({ name: file.name, status: `Produtos importados: ${parsed.length} → ${detectedKey}`, ok: true });
           } else {
             newLog.push({
               name: file.name,
@@ -448,7 +458,7 @@ export default function ControleEstoque() {
       });
       e.target.value = "";
     },
-    [precios]
+    [precios, currentKey]
   );
 
   // ── Recalculate bico impacts when prices change ──
