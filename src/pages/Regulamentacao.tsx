@@ -79,7 +79,7 @@ interface Orgao {
    CONSTANTS
    ══════════════════════════════════════════════════════════ */
 
-const HOJE = new Date(2026, 5, 15); // 15 de Junho de 2026
+const HOJE = new Date();
 
 const ORGAOS: Orgao[] = [
   {
@@ -445,18 +445,25 @@ export default function Regulamentacao() {
       const org = ORGAOS.find((o) => o.id === orgaoId);
       if (!org) return { atendidos: 0, total: 0, percentual: 0 };
       const docs = dados[orgaoId] || [];
-      const nomesDoc = docs.map((d) => d.nome.toLowerCase());
+
+      // Normaliza texto: remove acentos, parênteses e coloca em minúsculas
+      const norm = (s: string) =>
+        s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[()]/g, " ");
+
+      // Extrai palavras significativas (4+ chars) de uma string
+      const keywords = (s: string) =>
+        norm(s).split(/[\s\-\/]+/).filter((w) => w.length >= 4);
+
+      const nomesDoc = docs.map((d) => norm(d.nome));
+
       let atendidos = 0;
       org.checklistObrigatorio.forEach((item) => {
-        if (nomesDoc.some((n) => n.includes(item.toLowerCase().slice(0, 8)))) {
-          atendidos++;
-        }
+        const kws = keywords(item);
+        // Um documento atende o item se seu nome contiver QUALQUER palavra-chave do item
+        const atendido = nomesDoc.some((n) => kws.some((kw) => n.includes(kw)));
+        if (atendido) atendidos++;
       });
-      // Also count if there are any valid documents covering the category
-      const validDocs = docs.filter((d) => calcularStatus(d.dataVencimento) === "valido");
-      if (validDocs.length >= org.checklistObrigatorio.length) {
-        atendidos = org.checklistObrigatorio.length;
-      }
+
       return {
         atendidos,
         total: org.checklistObrigatorio.length,
